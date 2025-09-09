@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Katalog Taman</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .masonry-container {
+            column-count: 2;
+            column-gap: 1rem;
+        }
+        .masonry-item {
+            display: inline-block;
+            width: 100%;
+            margin-bottom: 1rem;
+            break-inside: avoid;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #E60023;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .category-btn {
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .category-btn.active {
+            background-color: #E60023;
+            color: white;
+            border-color: #E60023;
+        }
+    </style>
+</head>
+<body class="bg-white text-gray-800">
+
+    <div id="app" class="max-w-md mx-auto h-screen flex flex-col">
+        <!-- HALAMAN LOGIN -->
+        <div id="loginPage" style="display: none;" class="flex flex-col items-center justify-center h-full p-6 text-center">
+            <span class="text-5xl text-red-600 mb-4"><i class="fa-solid fa-seedling"></i></span>
+            <h1 class="text-3xl font-bold mb-2">Selamat Datang</h1>
+            <p class="text-gray-500 mb-6 px-4">
+                <b class="text-red-500">PERHATIAN:</b> Seluruh materi visual di dalam katalog ini dilindungi hak cipta. Penyalahgunaan untuk kepentingan komersial tanpa izin akan diproses secara hukum.
+            </p>
+            <form id="loginForm" class="w-full max-w-sm">
+                <input type="text" id="userName" name="Nama" required class="w-full px-4 py-3 mb-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="Masukkan nama Anda">
+                <input type="tel" id="userWA" name="No_WA" required class="w-full px-4 py-3 mb-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="Nomor WhatsApp (628...)">
+                <button type="submit" class="w-full bg-red-600 text-white font-bold py-3 rounded-lg hover:bg-red-700 transition-colors">Masuk</button>
+            </form>
+            <p id="loginError" class="text-red-500 mt-3 text-sm h-4"></p>
+        </div>
+
+        <!-- HALAMAN UTAMA -->
+        <div id="mainContent" style="display: none;" class="flex flex-col h-full">
+            <header class="p-4 flex-shrink-0 z-20">
+                <div class="flex items-center space-x-4">
+                    <button id="homeButton" class="font-semibold pb-2 transition-colors">Katalog Produk</button>
+                    <div id="jasaMenuContainer" class="relative flex-grow"></div>
+                </div>
+            </header>
+            <main id="pageContent" class="flex-grow overflow-y-auto px-4 pb-20"></main>
+            <footer class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-gray-200 z-10">
+                <div class="flex justify-around items-center h-16 text-2xl text-gray-500">
+                    <button onclick="showPage('home'); setActiveMenu('Beranda');" class="p-3 rounded-full hover:bg-gray-100"><i class="fas fa-home"></i></button>
+                    <button onclick="showPage('profile')" class="p-3 rounded-full hover:bg-gray-100"><i class="fas fa-user"></i></button>
+                    <button onclick="showPage('privacy')" class="p-3 rounded-full hover:bg-gray-100"><i class="fas fa-shield-halved"></i></button>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxpNmhUU99PA8lq8h-a04MW87F2SM1FkQr4SWZk1Z-CYm4SCJ-9L-2xAYRaT241OB25/exec';
+        const WA_NUMBER_ADMIN = "6281343640044";
+
+        let allData = { katalogUtama: [], itemKatalog: [], infoProfil: [], jasaLayanan: [], galeriJasa: [] };
+        let currentUser = null;
+        const ITEMS_PER_PAGE = 12;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('katalogTamanUser');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                showMainContent();
+                initializeApp();
+            } else {
+                showLoginPage();
+            }
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+        });
+
+        function showLoginPage() {
+            document.getElementById('loginPage').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+        }
+
+        function showMainContent() {
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'flex';
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            const form = event.target;
+            const button = form.querySelector('button');
+            button.disabled = true;
+            button.innerHTML = '<div class="loader mx-auto"></div>';
+            const formData = new FormData(form);
+            try {
+                const response = await fetch(GOOGLE_APPS_SCRIPT_URL, { method: 'POST', body: formData });
+                const result = await response.json();
+                if (result.result === 'success') {
+                    currentUser = { nama: form.elements.Nama.value, no_wa: form.elements.No_WA.value };
+                    localStorage.setItem('katalogTamanUser', JSON.stringify(currentUser));
+                    showMainContent();
+                    initializeApp();
+                } else { throw new Error(result.message || 'Gagal menyimpan data.'); }
+            } catch (error) {
+                console.error('Login Error:', error);
+                document.getElementById('loginError').textContent = 'Terjadi kesalahan. Coba lagi.';
+            } finally {
+                button.disabled = false;
+                button.innerHTML = 'Masuk';
+            }
+        }
+        
+        async function fetchData(sheetName) {
+            try {
+                const response = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?sheet=${sheetName}&t=${new Date().getTime()}`);
+                if (!response.ok) throw new Error(`Network error`);
+                const result = await response.json();
+                if (result.result === 'success') return result.data;
+                else throw new Error(result.message);
+            } catch (error) {
+                console.error(`Error fetching ${sheetName}:`, error);
+                throw new Error(`Gagal memuat data untuk '${sheetName}'.`);
+            }
+        }
+
+        async function initializeApp() {
+            showLoading();
+            try {
+                [allData.katalogUtama, allData.itemKatalog, allData.infoProfil, allData.jasaLayanan, allData.galeriJasa] = await Promise.all([
+                    fetchData('KatalogUtama'),
+                    fetchData('ItemKatalog'),
+                    fetchData('InfoProfil'),
+                    fetchData('JasaLayanan'),
+                    fetchData('GaleriJasa')
+                ]);
+                renderMenu();
+                showPage('home');
+                setActiveMenu('Beranda');
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+        
+        function showLoading() {
+             document.getElementById('pageContent').innerHTML = '<div class="flex justify-center items-center h-full"><div class="loader"></div></div>';
+        }
+
+        function showError(message) {
+            document.getElementById('pageContent').innerHTML = `<div class="p-4 bg-red-100 text-red-800 rounded-lg m-4"><h3 class="font-bold">Terjadi Kesalahan</h3><p class="text-sm mt-1">${message}</p></div>`;
+        }
+        
+        function renderMenu() {
+            const menuContainer = document.getElementById('jasaMenuContainer');
+            document.getElementById('homeButton').addEventListener('click', () => { showPage('home'); setActiveMenu('Beranda'); });
+            
+            const menuHTML = `
+                <button id="dropdownButton" onclick="toggleDropdown()" class="w-full flex items-center justify-between px-4 py-2 bg-white border border-gray-300 rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-red-500">
+                    <span id="dropdownButtonText" class="font-semibold text-gray-500">Jasa & Layanan</span>
+                    <i class="fas fa-chevron-down transition-transform duration-200"></i>
+                </button>
+                <div id="dropdownPanel" class="hidden absolute w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl">
+                    ${allData.jasaLayanan.map(jasa => `<a href="#" onclick="showPage('${jasa.id_jasa}'); setActiveMenu('${jasa.nama_jasa}');" class="block px-4 py-3 text-gray-700 hover:bg-red-50 transition-colors">${jasa.nama_jasa}</a>`).join('')}
+                </div>`;
+            menuContainer.innerHTML = menuHTML;
+        }
+        
+        function toggleDropdown() {
+            document.getElementById('dropdownPanel').classList.toggle('hidden');
+            document.querySelector('#dropdownButton i').classList.toggle('rotate-180');
+        }
+
+        function setActiveMenu(menuText) {
+            const homeButton = document.getElementById('homeButton');
+            const dropdownButtonText = document.getElementById('dropdownButtonText');
+            const dropdownPanel = document.getElementById('dropdownPanel');
+
+            if (menuText === 'Beranda') {
+                homeButton.classList.add('text-red-600', 'border-b-2', 'border-red-600');
+                homeButton.classList.remove('text-gray-500', 'border-transparent');
+                dropdownButtonText.textContent = 'Jasa & Layanan';
+                dropdownButtonText.classList.remove('text-red-600');
+                dropdownButtonText.classList.add('text-gray-500');
+            } else {
+                homeButton.classList.remove('text-red-600', 'border-b-2', 'border-red-600');
+                homeButton.classList.add('text-gray-500', 'border-b-2', 'border-transparent');
+                dropdownButtonText.textContent = menuText;
+                dropdownButtonText.classList.add('text-red-600');
+                dropdownButtonText.classList.remove('text-gray-500');
+            }
+            
+            if (dropdownPanel && !dropdownPanel.classList.contains('hidden')) {
+                toggleDropdown();
+            }
+        }
+        
+        function renderHomePage() {
+             const pageContent = `
+                <div id="homePage" class="content-section">
+                     <div class="mb-4 relative">
+                        <input type="text" id="katalogSearchInput" onkeyup="handleKatalogSearch()" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="Cari katalog produk...">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    </div>
+                    <div id="katalogUtamaContainer" class="masonry-container">
+                        ${allData.katalogUtama.map(katalog => `
+                            <div class="masonry-item rounded-lg overflow-hidden cursor-pointer catalog-card" data-title="${katalog.nama_katalog.toLowerCase()}" onclick="renderKatalogPage('${katalog.id_katalog}')">
+                                <img src="${katalog.url_gambar_cover}" alt="${katalog.nama_katalog}" class="w-full h-auto object-cover" onerror="this.onerror=null;this.src='https://placehold.co/400x500/eee/ccc?text=Gagal+Muat';">
+                                <div class="p-3">
+                                    <h3 class="font-bold">${katalog.nama_katalog}</h3>
+                                    <p class="text-sm text-gray-600">${katalog.deskripsi_singkat}</p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+            document.getElementById('pageContent').innerHTML = pageContent;
+        }
+
+        function handleKatalogSearch() {
+            const filter = document.getElementById('katalogSearchInput').value.toLowerCase();
+            document.querySelectorAll('#katalogUtamaContainer .catalog-card').forEach(card => {
+                card.style.display = card.dataset.title.includes(filter) ? "" : "none";
+            });
+        }
+        
+        function renderKatalogPage(katalogId) {
+            const pageContent = document.getElementById('pageContent');
+            const katalogInfo = allData.katalogUtama.find(k => k.id_katalog === katalogId);
+            const allItemsInKatalog = allData.itemKatalog.filter(item => item.id_katalog === katalogId);
+
+            const headerHTML = `
+                <div class="mb-4">
+                    <div class="flex items-center gap-3">
+                        <button onclick="showPage('home'); setActiveMenu('Beranda');" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-red-600 hover:bg-red-50 rounded-full transition-colors"><i class="fas fa-arrow-left text-xl"></i></button>
+                        <div class="flex-grow"><h1 class="text-xl font-semibold leading-tight">${katalogInfo.nama_katalog}</h1></div>
+                    </div>
+                </div>`;
+
+            const searchHTML = `<div class="mb-4 relative"><input type="text" id="itemSearchInput" onkeyup="updateKatalogView('${katalogId}')" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-red-500" placeholder="Cari nama item..."><i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i></div>`;
+            
+            const categories = ['Semua', ...new Set(allItemsInKatalog.map(item => item.kategori).filter(Boolean))];
+            const categoriesHTML = categories.length > 1 ? `<div class="mb-4 overflow-x-auto no-scrollbar"><div class="flex space-x-2" id="category-filters">${categories.map(cat => `<button onclick="updateKatalogView('${katalogId}', this)" class="category-btn px-4 py-1 border rounded-full text-sm ${cat === 'Semua' ? 'active' : ''}">${cat}</button>`).join('')}</div></div>` : '';
+
+            pageContent.innerHTML = headerHTML + searchHTML + categoriesHTML + `<div id="katalog-items-container"></div>`;
+            updateKatalogView(katalogId);
+        }
+        
+        function updateKatalogView(katalogId, clickedButton = null) {
+            const categoryFilters = document.getElementById('category-filters');
+            if (clickedButton && categoryFilters) {
+                categoryFilters.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('active'));
+                clickedButton.classList.add('active');
+            }
+            
+            const activeCategoryButton = categoryFilters ? categoryFilters.querySelector('.category-btn.active') : null;
+            const activeCategory = activeCategoryButton ? activeCategoryButton.textContent : 'Semua';
+            
+            const searchInput = document.getElementById('itemSearchInput');
+            const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+            let itemsToShow = allData.itemKatalog.filter(item => item.id_katalog === katalogId);
+            
+            if (activeCategory !== 'Semua') {
+                itemsToShow = itemsToShow.filter(item => item.kategori === activeCategory);
+            }
+            
+            if (searchTerm) {
+                itemsToShow = itemsToShow.filter(item => item.nama_item.toLowerCase().includes(searchTerm));
+            }
+
+            displayPaginatedItems(itemsToShow, 1);
+        }
+
+        function displayPaginatedItems(items, page) {
+             const container = document.getElementById('katalog-items-container');
+            if(!container) return;
+
+            const waNumber = WA_NUMBER_ADMIN;
+            const start = (page - 1) * ITEMS_PER_PAGE;
+            const end = start + ITEMS_PER_PAGE;
+            const paginatedItems = items.slice(start, end);
+
+            const itemsHTML = paginatedItems.map(item => {
+                const waMessage = `Halo, saya tertarik dengan '${item.nama_item}'.`;
+                const waLink = `https://wa.me/${waNumber}?text=${encodeURIComponent(waMessage)}`;
+                
+                const deskripsiOrHarga = item.deskripsi_item || '&nbsp;';
+                const formattedContent = formatRupiah(deskripsiOrHarga);
+                const isHarga = formattedContent.isHarga;
+                
+                const contentHTML = isHarga
+                    ? `<p class="text-sm font-semibold text-red-600 mb-3 flex-grow">${formattedContent.content}</p>`
+                    : `<p class="text-sm text-gray-600 mb-3 flex-grow">${formattedContent.content}</p>`;
+
+                return `
+                <div class="masonry-item rounded-lg overflow-hidden border flex flex-col">
+                    <img src="${item.url_gambar_item}" alt="${item.nama_item}" class="w-full h-auto object-cover" onerror="this.onerror=null;this.src='https://placehold.co/400x400/eee/ccc?text=Gagal+Muat';">
+                    <div class="p-3 flex-grow flex flex-col">
+                        <h3 class="font-bold">${item.nama_item}</h3>
+                        ${contentHTML}
+                        <a href="${waLink}" target="_blank" class="mt-auto w-full bg-green-500 text-white text-sm font-bold py-2 px-3 rounded-lg inline-flex items-center justify-center gap-2 hover:bg-green-600 transition-colors">
+                            <i class="fab fa-whatsapp"></i>
+                            Konsultasi
+                        </a>
+                    </div>
+                </div>`;
+            }).join('');
+
+            const masonryContainer = container.querySelector('.masonry-container');
+            if (page === 1) {
+                container.innerHTML = `<div class="masonry-container">${itemsHTML}</div>`;
+            } else if(masonryContainer) {
+                masonryContainer.insertAdjacentHTML('beforeend', itemsHTML);
+            }
+
+            const oldLoadMoreBtn = document.getElementById('load-more-btn');
+            if (oldLoadMoreBtn) oldLoadMoreBtn.remove();
+            
+            if (items.length > end) {
+                const loadMoreBtn = document.createElement('button');
+                loadMoreBtn.id = 'load-more-btn';
+                loadMoreBtn.textContent = 'Muat Lebih Banyak';
+                loadMoreBtn.className = 'w-full mt-4 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700 transition-colors';
+                loadMoreBtn.onclick = () => displayPaginatedItems(items, page + 1);
+                container.appendChild(loadMoreBtn);
+            }
+        }
+        
+        function formatRupiah(text) {
+            if (!text) return { content: '&nbsp;', isHarga: false };
+            const cleanText = text.toString().trim();
+            const number = parseInt(cleanText, 10);
+            if (!isNaN(number) && number.toString() === cleanText) {
+                return { content: 'Rp ' + number.toLocaleString('id-ID'), isHarga: true };
+            }
+            return { content: text, isHarga: false };
+        }
+
+        function renderJasaPage(jasaId) {
+            const jasaInfo = allData.jasaLayanan.find(j => j.id_jasa === jasaId);
+            const galeriItems = allData.galeriJasa.filter(g => g.id_jasa === jasaId);
+            const pageContent = document.getElementById('pageContent');
+            if (!jasaInfo) { return showError("Halaman layanan tidak ditemukan."); }
+
+            let imagesHTML = '';
+            if (jasaId === 'jasa_desain' && galeriItems.length >= 2) {
+                const pairedImages = [];
+                const befores = galeriItems.filter(i => i.label && i.label.toLowerCase() === 'before');
+                const afters = galeriItems.filter(i => i.label && i.label.toLowerCase() === 'after');
+                const others = galeriItems.filter(i => !i.label || (i.label.toLowerCase() !== 'before' && i.label.toLowerCase() !== 'after'));
+
+                for(let i = 0; i < Math.min(befores.length, afters.length); i++) {
+                    pairedImages.push({ before: befores[i], after: afters[i] });
+                }
+
+                imagesHTML += pairedImages.map(pair => `
+                    <div class="border rounded-lg shadow-md p-2 mb-4">
+                        <div class="flex space-x-2">
+                            <div class="w-1/2">
+                                <h3 class="font-bold text-center mb-2 text-gray-500 text-sm">BEFORE</h3>
+                                <img src="${pair.before.url_gambar}" class="w-full h-48 object-cover rounded-md">
+                            </div>
+                            <div class="w-1/2">
+                                <h3 class="font-bold text-center mb-2 text-gray-500 text-sm">AFTER</h3>
+                                <img src="${pair.after.url_gambar}" class="w-full h-48 object-cover rounded-md">
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+                if (others.length > 0) {
+                     imagesHTML += `<div class="masonry-container mb-4">${others.map(item => `<div class="masonry-item"><img src="${item.url_gambar}" class="w-full rounded-lg shadow"></div>`).join('')}</div>`;
+                }
+
+            } else if (galeriItems.length > 0) {
+                imagesHTML = `<div class="masonry-container mb-4">${galeriItems.map(item => `<div class="masonry-item"><img src="${item.url_gambar}" class="w-full rounded-lg shadow"></div>`).join('')}</div>`;
+            }
+
+            let buttonHTML = '';
+            if (jasaInfo.url_tombol === 'FORMULIR') {
+                buttonHTML = `<form id="designForm" onsubmit="handleDesignSubmit(event)" class="mt-6 space-y-4">
+                                <div><label for="designName" class="block text-sm font-medium text-gray-700">Nama Lengkap</label><input type="text" id="designName" value="${currentUser.nama}" required class="mt-1 block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500"></div>
+                                <div><label for="designWa" class="block text-sm font-medium text-gray-700">Nomor WhatsApp</label><input type="tel" id="designWa" value="${currentUser.no_wa}" required class="mt-1 block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500"></div>
+                                <p class="text-xs text-gray-500"><strong>Penting:</strong> Setelah menekan tombol kirim, Anda akan diarahkan ke WhatsApp untuk mengirimkan foto lokasi.</p>
+                                <button type="submit" class="w-full bg-green-500 text-white font-bold py-3 rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2"><i class="fab fa-whatsapp"></i> ${jasaInfo.teks_tombol}</button>
+                              </form>`;
+            } else if (jasaInfo.url_tombol) {
+                 const iconClass = jasaInfo.url_tombol.includes('wa.me') ? 'fab fa-whatsapp' : 'fas fa-file-download';
+                 const buttonColor = jasaInfo.url_tombol.includes('wa.me') ? 'bg-green-500 hover:bg-green-600' : 'bg-red-600 hover:bg-red-700';
+                 buttonHTML = `<a href="${jasaInfo.url_tombol}" target="_blank" class="w-full mt-6 ${buttonColor} text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"><i class="${iconClass}"></i> ${jasaInfo.teks_tombol}</a>`;
+            }
+
+            const pageHTML = `
+                <div class="p-4 space-y-4">
+                    <h1 class="text-2xl font-bold">${jasaInfo.judul_halaman}</h1>
+                    <p class="text-gray-600">${jasaInfo.deskripsi_halaman}</p>
+                    ${imagesHTML}
+                    ${buttonHTML}
+                </div>`;
+            
+            pageContent.innerHTML = pageHTML;
+        }
+
+        function handleDesignSubmit(event) {
+            event.preventDefault();
+            const name = document.getElementById('designName').value;
+            const wa = document.getElementById('designWa').value;
+            const message = `Halo, saya ingin memesan Jasa Desain Taman Online.\n\nNama: ${name}\nNo WA: ${wa}\n\nSaya akan kirimkan foto lokasinya sekarang.`;
+            const waLink = `https://wa.me/${WA_NUMBER_ADMIN}?text=${encodeURIComponent(message)}`;
+            window.open(waLink, '_blank');
+        }
+
+        function showPage(pageName) {
+            if (pageName === 'home') {
+                renderHomePage();
+            } else if (pageName.startsWith('jasa_')) {
+                renderJasaPage(pageName);
+            } else if (pageName === 'profile') {
+                document.getElementById('pageContent').innerHTML = renderProfilePage();
+            } else if (pageName === 'privacy') {
+                document.getElementById('pageContent').innerHTML = renderPrivacyPage();
+            }
+            window.scrollTo(0,0);
+        }
+
+        function renderProfilePage() {
+            const profile = allData.infoProfil[0] || {};
+            const waLink = `https://wa.me/${WA_NUMBER_ADMIN}?text=${encodeURIComponent('Halo, saya ingin bertanya tentang layanan Anda.')}`;
+
+            return `
+                <div id="profilePage" class="content-section p-4">
+                    <h1 class="text-2xl font-bold mb-6">${profile.nama_bisnis || 'Nama Bisnis Anda'}</h1>
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-4"><i class="fas fa-phone text-xl text-gray-500 w-6 text-center"></i><span>${profile.no_kontak_wa || 'Nomor WhatsApp Anda'}</span></div>
+                        <div class="flex items-start gap-4"><i class="fas fa-map-marker-alt text-xl text-gray-500 w-6 text-center pt-1"></i><span>${profile.alamat || 'Alamat Lengkap Anda'}</span></div>
+                    </div>
+                    <div class="mt-6">
+                        <a href="https://id.tapsite.ai/ary-gasebo-desain-taman" target="_blank" class="w-full bg-gray-800 text-white font-bold py-3 rounded-lg hover:bg-gray-900 transition-colors flex items-center justify-center gap-2">
+                            <i class="fas fa-link"></i>
+                            Media Sosial & Portofolio Lainnya
+                        </a>
+                    </div>
+                    <div class="mt-6">
+                        ${profile.link_google_maps ? `<iframe src="${profile.link_google_maps.replace('/view?usp=sharing', '/embed')}" width="100%" height="300" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade" class="rounded-lg"></iframe>` : '<p class="text-gray-500">Peta belum diatur di Google Sheet.</p>'}
+                    </div>
+                     <div class="mt-8 text-center">
+                        <a href="${waLink}" target="_blank" class="bg-green-500 text-white font-bold py-3 px-6 rounded-full inline-flex items-center gap-2 hover:bg-green-600 transition-colors"><i class="fab fa-whatsapp"></i> Hubungi Kami</a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPrivacyPage() {
+            return `
+                <div id="privacyPage" class="content-section p-4">
+                    <h1 class="text-2xl font-bold mb-4">Kebijakan Privasi & Hak Cipta</h1>
+                    <div class="space-y-4 text-gray-700">
+                        <p>Kami sangat menghargai privasi Anda. Informasi yang Anda berikan melalui form login, seperti nama dan nomor WhatsApp, hanya akan digunakan untuk keperluan komunikasi terkait layanan kami dan tidak akan dibagikan kepada pihak ketiga tanpa persetujuan Anda.</p>
+                        <h2 class="text-xl font-semibold pt-4">Peringatan Hak Cipta</h2>
+                        <p class="text-red-600 font-medium">Seluruh materi visual, termasuk namun tidak terbatas pada foto produk, desain taman, dan konten galeri lainnya yang terdapat di dalam katalog ini, adalah milik sah kami dan dilindungi oleh undang-undang hak cipta.</p>
+                        <p><strong>DILARANG KERAS</strong> untuk mengunduh, menyalin, mereproduksi, mempublikasikan ulang, atau mendistribusikan materi visual dari katalog ini untuk tujuan komersial maupun non-komersial tanpa izin tertulis dari kami.</p>
+                        <p>Setiap tindakan penyalahgunaan atau pelanggaran hak cipta akan kami tindak lanjuti secara serius melalui jalur hukum yang berlaku di Republik Indonesia.</p>
+                        <p>Terima kasih atas pengertian dan kerja sama Anda.</p>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
+
